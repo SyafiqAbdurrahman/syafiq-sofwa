@@ -1704,7 +1704,49 @@ document.addEventListener("visibilitychange", event => {
 })
 </script>
 <!-- ganti foto nama tamu -->
-<style id="e-addons-template-dynamic-164270d-inline">.elementor:is(.e-post-4620,.e-loop-item-4620) .elementor-element.elementor-element-164270d:not(.elementor-motion-effects-element-type-background), .elementor:is(.e-post-4620,.e-loop-item-4620) .elementor-element.elementor-element-164270d > .elementor-motion-effects-container > .elementor-motion-effects-layer{background-image: url("https://i.pinimg.com/736x/98/f7/3f/98f73fd243d4a3919ba10a7221bb7332.jpg");--e-bg-lazyload:url("https://i.pinimg.com/736x/98/f7/3f/98f73fd243d4a3919ba10a7221bb7332.jpg");background-position: center center;background-size: cover;}</style>	</body>
+<style id="e-addons-template-dynamic-164270d-inline">.elementor:is(.e-post-4620,.e-loop-item-4620) .elementor-element.elementor-element-164270d:not(.elementor-motion-effects-element-type-background), .elementor:is(.e-post-4620,.e-loop-item-4620) .elementor-element.elementor-element-164270d > .elementor-motion-effects-container > .elementor-motion-effects-layer{background-image: url("https://i.pinimg.com/736x/98/f7/3f/98f73fd243d4a3919ba10a7221bb7332.jpg");--e-bg-lazyload:url("https://i.pinimg.com/736x/98/f7/3f/98f73fd243d4a3919ba10a7221bb7332.jpg");background-position: center center;background-size: cover;}</style>	
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // Ambil nama tamu dari URL
+    const urlParams = new URLSearchParams(window.location.search);
+    let guestName = urlParams.get('to');
+
+    // Jika ada nama tamu di URL, ganti semua placeholder
+    if (guestName) {
+        // Ganti spasi dari format URL (%20 atau +) menjadi spasi biasa
+        guestName = decodeURIComponent(guestName.replace(/\+/g, ' '));
+
+        // Ganti tulisan "Nama Tamu" di semua bagian undangan
+        const elementsToUpdate = document.querySelectorAll('.elementor-widget-container');
+        elementsToUpdate.forEach(function(element) {
+            // Mengganti teks di dalam elemen dan juga di dalam input form
+            const innerHTML = element.innerHTML;
+            if (innerHTML.includes('Nama Tamu')) {
+                element.innerHTML = innerHTML.replace(/Nama Tamu/g, guestName);
+            }
+        });
+
+        // Ganti data untuk QR Code
+        const qrContainer = document.getElementById("qr_checkin_126");
+        if (qrContainer && typeof QRCodeStyling !== 'undefined') {
+            qrContainer.innerHTML = ''; // Kosongkan QR lama
+            const qr_checkin_126 = new QRCodeStyling({
+                width: 150,
+                height: 150,
+                type: "svg",
+                data: guestName, // Gunakan nama tamu dari URL untuk QR Code
+                image: "",
+                qrOptions: { errorCorrectionLevel: "Q" },
+                dotsOptions: { color: "#000", type: "square" },
+                backgroundOptions: { color: "#FFF" },
+                imageOptions: { imageSize: 0.3, crossOrigin: "anonymous", margin: 2 }
+            });
+            qr_checkin_126.append(qrContainer);
+        }
+    }
+});
+</script>
+</body>
 
 <!-- Mirrored from invitimo.my.id/motion-01/?to=Nama+Tamu by HTTrack Website Copier/3.x [XR&CO'2014], Sun, 27 Jul 2025 08:57:25 GMT -->
 </html>
