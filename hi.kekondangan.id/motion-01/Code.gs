@@ -16,8 +16,8 @@ function doPost(e) {
     // Jika sheet belum ada, buat sheet baru dengan header
     if (!sheet) {
       sheet = spreadsheet.insertSheet(SHEET_NAME);
-      sheet.getRange(1, 1, 1, 5).setValues([['Timestamp', 'Nama', 'Kehadiran', 'Ucapan', 'IP Address']]);
-      sheet.getRange(1, 1, 1, 5).setFontWeight('bold');
+      sheet.getRange(1, 1, 1, 4).setValues([['Timestamp', 'Nama', 'Kehadiran', 'Ucapan']]);
+      sheet.getRange(1, 1, 1, 4).setFontWeight('bold');
       sheet.setFrozenRows(1);
     }
     
@@ -58,8 +58,7 @@ function doPost(e) {
       timestamp,
       data.name,
       data.attendance,
-      data.wish,
-      'Web Form'
+      data.wish
     ];
     
     sheet.appendRow(newRow);
@@ -127,8 +126,8 @@ function doGet(e) {
     if (!sheet) {
       // Create sheet if it doesn't exist
       sheet = spreadsheet.insertSheet(SHEET_NAME);
-      sheet.getRange(1, 1, 1, 5).setValues([['Timestamp', 'Nama', 'Kehadiran', 'Ucapan', 'IP Address']]);
-      sheet.getRange(1, 1, 1, 5).setFontWeight('bold');
+      sheet.getRange(1, 1, 1, 4).setValues([['Timestamp', 'Nama', 'Kehadiran', 'Ucapan']]);
+      sheet.getRange(1, 1, 1, 4).setFontWeight('bold');
       sheet.setFrozenRows(1);
       
       const response = {
@@ -190,8 +189,8 @@ function handleFormSubmission(data, spreadsheetId, sheetName) {
     // Create sheet if it doesn't exist
     if (!sheet) {
       sheet = spreadsheet.insertSheet(sheetName);
-      sheet.getRange(1, 1, 1, 5).setValues([['Timestamp', 'Nama', 'Kehadiran', 'Ucapan', 'IP Address']]);
-      sheet.getRange(1, 1, 1, 5).setFontWeight('bold');
+      sheet.getRange(1, 1, 1, 4).setValues([['Timestamp', 'Nama', 'Kehadiran', 'Ucapan']]);
+      sheet.getRange(1, 1, 1, 4).setFontWeight('bold');
       sheet.setFrozenRows(1);
     }
     
@@ -201,8 +200,7 @@ function handleFormSubmission(data, spreadsheetId, sheetName) {
       timestamp,
       data.name,
       data.attendance,
-      data.wish,
-      'Web Form'
+      data.wish
     ];
     
     sheet.appendRow(newRow);

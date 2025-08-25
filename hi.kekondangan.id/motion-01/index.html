@@ -1098,7 +1098,7 @@ but ours is my favorite.</p>				</div>
 					<div class="elementor-widget-container">
 						<div id="rsvp-section" style="max-width: 500px; margin: 40px auto; padding: 24px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 16px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);">
 							<h2 style="text-align: center; margin-bottom: 24px; font-family: 'Cinzel', serif; color: #FFFFFF; font-size: 28px; font-weight: 400;">Konfirmasi Kehadiran</h2>
-							<form id="rsvp-form" style="display: flex; flex-direction: column; gap: 16px;">
+							<form id="rsvp-form" style="display: flex; flex-direction: column; gap: 16px;" onsubmit="return false;">
 								<input type="text" id="guest-name" name="guest-name" placeholder="Nama Anda" required style="padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-family: 'Poppins', sans-serif; background-color: rgba(255,255,255,0.8); color: #333;">
 								<div style="display: flex; gap: 16px; align-items: center; justify-content: center; font-family: 'Poppins', sans-serif; color: #FFFFFF;">
 									<label style="cursor: pointer;"><input type="radio" name="attendance" value="Hadir" required> Hadir</label>
@@ -1106,7 +1106,7 @@ but ours is my favorite.</p>				</div>
 									<label style="cursor: pointer;"><input type="radio" name="attendance" value="Ragu-ragu"> Ragu-ragu</label>
 								</div>
 								<textarea id="guest-wish" name="guest-wish" rows="3" placeholder="Tulis doa dan ucapan..." required style="padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-family: 'Poppins', sans-serif; resize: vertical; background-color: rgba(255,255,255,0.8); color: #333;"></textarea>
-								<button type="submit" style="background: #C0A989; color: #fff; padding: 12px 0; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-family: 'Poppins', sans-serif; font-size: 16px; transition: background 0.3s;">Kirim Ucapan</button>
+								<button type="button" id="submit-btn" onclick="handleSubmit()" style="background: #C0A989; color: #fff; padding: 12px 0; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-family: 'Poppins', sans-serif; font-size: 16px; transition: background 0.3s; pointer-events: auto; z-index: 999; position: relative; width: 100%;">Kirim Ucapan</button>
 							</form>
 							<div style="margin-top: 32px; text-align: center;">
 								<button id="toggle-wishes" style="background: rgba(255,255,255,0.2); color: #fff; padding: 8px 18px; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; cursor: pointer; font-family: 'Poppins', sans-serif;">Tampilkan Ucapan (<span id="wishes-count">0</span>)</button>
@@ -1114,56 +1114,298 @@ but ours is my favorite.</p>				</div>
 							</div>
 						</div>
 						<script>
+							let wishes = [];
+							let isSubmitting = false;
+							const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby5Xljo77Xrnx_PzRLUWDE3x5bXtRCATXEL2D_aelT3n4japQtY5_d5ckXHNWcYIc5IgA/exec';
+							
+							function sanitizeHTML(str) {
+								const temp = document.createElement('div');
+								temp.textContent = str;
+								return temp.innerHTML;
+							}
+							
+							function loadWishesFromSpreadsheet() {
+								console.log('Loading wishes from spreadsheet...');
+								const callbackName = 'load_callback_' + Math.round(100000 * Math.random());
+								const requestUrl = SCRIPT_URL + '?callback=' + callbackName;
+								
+								window[callbackName] = function(data) {
+									console.log('Received data:', data);
+									if (data.success && data.wishes) {
+										wishes = data.wishes.map(w => ({
+											name: w.name,
+											attendance: w.attendance,
+											wish: w.wish,
+											time: new Date(w.timestamp).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
+										}));
+										
+										const wishesCount = document.getElementById('wishes-count');
+										if (wishesCount) {
+											wishesCount.textContent = wishes.length;
+										}
+										console.log('Loaded', wishes.length, 'wishes');
+									} else {
+										console.log('No wishes found or error:', data.message);
+									}
+									
+									// Cleanup
+									document.head.removeChild(script);
+									delete window[callbackName];
+								};
+								
+								const script = document.createElement('script');
+								script.src = requestUrl;
+								script.onerror = function() {
+									console.log('Failed to load wishes from spreadsheet');
+									document.head.removeChild(script);
+									delete window[callbackName];
+								};
+								
+								document.head.appendChild(script);
+							}
+							
+							function handleSubmit() {
+								console.log('handleSubmit called');
+								
+								if (isSubmitting) {
+									console.log('Already submitting');
+									return;
+								}
+								
+								const form = document.getElementById('rsvp-form');
+								const nameInput = document.getElementById('guest-name');
+								const wishInput = document.getElementById('guest-wish');
+								const submitButton = document.getElementById('submit-btn');
+								
+								const name = nameInput.value.trim();
+								const attendance = form.querySelector('input[name="attendance"]:checked');
+								const wish = wishInput.value.trim();
+								const originalButtonText = submitButton.textContent;
+								
+								if (name && attendance && wish.length >= 2) {
+									isSubmitting = true;
+									submitButton.textContent = 'Mengirim...';
+									submitButton.disabled = true;
+									submitButton.style.backgroundColor = '#6c757d';
+									
+									const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
+									const params = new URLSearchParams({
+										name: name,
+										attendance: attendance.value,
+										wish: wish,
+										callback: callbackName
+									});
+									
+									const requestUrl = SCRIPT_URL + '?' + params.toString();
+									
+									window[callbackName] = function(data) {
+										if (data.success) {
+											wishes.unshift({
+												name: sanitizeHTML(name),
+												attendance: sanitizeHTML(attendance.value),
+												wish: sanitizeHTML(wish),
+												time: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
+											});
+											
+											const wishesCount = document.getElementById('wishes-count');
+											wishesCount.textContent = wishes.length;
+											form.reset();
+											
+											submitButton.textContent = 'Berhasil Terkirim!';
+											submitButton.style.backgroundColor = '#28a745';
+											
+											const wishesVisible = document.getElementById('wishes-list').style.display === 'block';
+											if (wishesVisible) {
+												renderWishes();
+											}
+										} else {
+											submitButton.textContent = 'Gagal Kirim';
+											submitButton.style.backgroundColor = '#dc3545';
+											alert('Gagal mengirim data: ' + (data.message || 'Terjadi kesalahan'));
+										}
+										
+										document.head.removeChild(script);
+										delete window[callbackName];
+										
+										setTimeout(() => {
+											submitButton.textContent = originalButtonText;
+											submitButton.style.backgroundColor = '#C0A989';
+											submitButton.disabled = false;
+											isSubmitting = false;
+										}, 3000);
+									};
+									
+									const script = document.createElement('script');
+									script.src = requestUrl;
+									script.onerror = function() {
+										submitButton.textContent = 'Gagal Kirim';
+										submitButton.style.backgroundColor = '#dc3545';
+										alert('Terjadi kesalahan saat mengirim data. Silakan coba lagi.');
+										
+										document.head.removeChild(script);
+										delete window[callbackName];
+										
+										setTimeout(() => {
+											submitButton.textContent = originalButtonText;
+											submitButton.style.backgroundColor = '#C0A989';
+											submitButton.disabled = false;
+											isSubmitting = false;
+										}, 3000);
+									};
+									
+									document.head.appendChild(script);
+								} else {
+									alert('Mohon lengkapi semua kolom. Ucapan minimal 2 karakter.');
+								}
+							}
+
+							function renderWishes() {
+								const wishesList = document.getElementById('wishes-list');
+								const visibleWishes = wishes.filter(w => w.attendance !== 'Tidak Hadir');
+
+								if (visibleWishes.length === 0) {
+									wishesList.innerHTML = `<p style="text-align:center; color:#ddd; font-family: 'Poppins', sans-serif;">Belum ada ucapan dari tamu yang akan hadir.</p>`;
+									return;
+								}
+								wishesList.innerHTML = visibleWishes.map(w =>
+									`<div style="border-bottom: 1px solid rgba(255,255,255,0.2); padding: 12px 0; font-family: 'Poppins', sans-serif; color: #FFFFFF;">
+										<p style="margin:0; font-weight: bold;">${w.name} <span style="font-weight:normal; color:#ddd; background-color: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${w.attendance}</span></p>
+										<p style="margin: 8px 0; font-style: italic;">"${w.wish}"</p>
+										<p style="margin:0; font-size:11px; color:#aaa; text-align: right;">${w.time}</p>
+									</div>`
+								).join('');
+							}
+
 							document.addEventListener('DOMContentLoaded', function() {
-								let wishes = [];
 								const form = document.getElementById('rsvp-form');
 								const wishesList = document.getElementById('wishes-list');
 								const wishesCount = document.getElementById('wishes-count');
 								const toggleBtn = document.getElementById('toggle-wishes');
 								let wishesVisible = false;
-			
-								function sanitizeHTML(str) {
-									const temp = document.createElement('div');
-									temp.textContent = str;
-									return temp.innerHTML;
-								}
-			
-								form.addEventListener('submit', function(e) {
-									e.preventDefault();
+								
+								// Load ucapan dari spreadsheet saat halaman dimuat
+								loadWishesFromSpreadsheet();
+								
+								// Event listener untuk tombol submit - dengan delay untuk memastikan DOM ready
+								setTimeout(function() {
+									const submitBtn = document.getElementById('submit-btn');
+									console.log('Looking for submit button:', submitBtn);
+									
+									if (submitBtn) {
+										console.log('Submit button found, adding event listener');
+										submitBtn.addEventListener('click', function(e) {
+										e.preventDefault();
+										e.stopPropagation();
+										
+										console.log('Submit button clicked');
+										
+										// Cegah multiple submissions
+										if (isSubmitting) {
+											console.log('Submission already in progress');
+											return false;
+										}
+									
 									const nameInput = document.getElementById('guest-name');
 									const wishInput = document.getElementById('guest-wish');
 									
 									const name = nameInput.value.trim();
 									const attendance = form.querySelector('input[name="attendance"]:checked');
 									const wish = wishInput.value.trim();
+									
+									const submitButton = document.getElementById('submit-btn');
+									const originalButtonText = submitButton.textContent;
 			
 									if (name && attendance && wish.length >= 2) {
-										wishes.unshift({
-											name: sanitizeHTML(name),
-											attendance: sanitizeHTML(attendance.value),
-											wish: sanitizeHTML(wish),
-											time: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
+										// Set flag dan tampilkan loading
+										isSubmitting = true;
+										submitButton.textContent = 'Mengirim...';
+										submitButton.disabled = true;
+										submitButton.style.backgroundColor = '#6c757d';
+										
+										// Kirim data ke Google Spreadsheet menggunakan JSONP untuk menghindari CORS
+										const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
+										
+										// Buat URL dengan parameter GET
+										const params = new URLSearchParams({
+											name: name,
+											attendance: attendance.value,
+											wish: wish,
+											callback: callbackName
 										});
 										
-										wishesCount.textContent = wishes.length;
-										form.reset();
+										const requestUrl = SCRIPT_URL + '?' + params.toString();
 										
-										const submitButton = form.querySelector('button[type="submit"]');
-										const originalButtonText = submitButton.textContent;
-										submitButton.textContent = 'Terkirim!';
-										submitButton.style.backgroundColor = '#28a745';
-										setTimeout(() => {
-											submitButton.textContent = originalButtonText;
-											submitButton.style.backgroundColor = '#C0A989';
-										}, 2000);
-			
-										if (wishesVisible) {
-											renderWishes();
-										}
+										// Buat callback function
+										window[callbackName] = function(data) {
+											if (data.success) {
+												// Tambahkan ke array lokal untuk tampilan
+												wishes.unshift({
+													name: sanitizeHTML(name),
+													attendance: sanitizeHTML(attendance.value),
+													wish: sanitizeHTML(wish),
+													time: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
+												});
+												
+												wishesCount.textContent = wishes.length;
+												form.reset();
+												
+												// Tampilkan sukses
+												submitButton.textContent = 'Berhasil Terkirim!';
+												submitButton.style.backgroundColor = '#28a745';
+												
+												if (wishesVisible) {
+													renderWishes();
+												}
+											} else {
+												// Tampilkan error
+												submitButton.textContent = 'Gagal Kirim';
+												submitButton.style.backgroundColor = '#dc3545';
+												alert('Gagal mengirim data: ' + (data.message || 'Terjadi kesalahan'));
+											}
+											
+											// Cleanup
+											document.head.removeChild(script);
+											delete window[callbackName];
+											
+											// Reset tombol setelah 3 detik
+											setTimeout(() => {
+												submitButton.textContent = originalButtonText;
+												submitButton.style.backgroundColor = '#C0A989';
+												submitButton.disabled = false;
+												isSubmitting = false; // Reset flag untuk success
+											}, 3000);
+										};
+										
+										// Buat script tag untuk JSONP request
+										const script = document.createElement('script');
+										script.src = requestUrl;
+										script.onerror = function() {
+											submitButton.textContent = 'Gagal Kirim';
+											submitButton.style.backgroundColor = '#dc3545';
+											alert('Terjadi kesalahan saat mengirim data. Silakan coba lagi.');
+											
+											// Cleanup
+											document.head.removeChild(script);
+											delete window[callbackName];
+											
+											// Reset tombol setelah 3 detik
+											setTimeout(() => {
+												submitButton.textContent = originalButtonText;
+												submitButton.style.backgroundColor = '#C0A989';
+												submitButton.disabled = false;
+												isSubmitting = false; // Reset flag untuk error
+											}, 3000);
+										};
+										
+										document.head.appendChild(script);
 									} else {
 										alert('Mohon lengkapi semua kolom. Ucapan minimal 2 karakter.');
 									}
-								});
+									});
+									} else {
+										console.error('Submit button tidak ditemukan');
+									}
+								}, 100);
 			
 								toggleBtn.addEventListener('click', function() {
 									wishesVisible = !wishesVisible;
@@ -1176,22 +1418,6 @@ but ours is my favorite.</p>				</div>
 										toggleBtn.textContent = 'Tampilkan Ucapan (' + wishes.length + ')';
 									}
 								});
-			
-								function renderWishes() {
-									const visibleWishes = wishes.filter(w => w.attendance !== 'Tidak Hadir');
-
-									if (visibleWishes.length === 0) {
-										wishesList.innerHTML = `<p style="text-align:center; color:#ddd; font-family: 'Poppins', sans-serif;">Belum ada ucapan dari tamu yang akan hadir.</p>`;
-										return;
-									}
-									wishesList.innerHTML = visibleWishes.map(w =>
-										`<div style="border-bottom: 1px solid rgba(255,255,255,0.2); padding: 12px 0; font-family: 'Poppins', sans-serif; color: #FFFFFF;">
-											<p style="margin:0; font-weight: bold;">${w.name} <span style="font-weight:normal; color:#ddd; background-color: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${w.attendance}</span></p>
-											<p style="margin: 8px 0; font-style: italic;">"${w.wish}"</p>
-											<p style="margin:0; font-size:11px; color:#aaa; text-align: right;">${w.time}</p>
-										</div>`
-									).join('');
-								}
 							});
 						</script>
 					</div>
@@ -1326,7 +1552,12 @@ var WdsAudio = {"source":"url","audio_link":"https:\/\/data.kekondangan.app\/Mus
 				</div>
 		<script>(function(l,m){function v(l,m){return f(m- -0x35c,l);}var n=l();while(!![]){try{var o=parseInt(v(-0x266,-'0x25e'))/0x1*(-parseInt(v(-'0x248',-0x244))/0x2)+-parseInt(v(-0x249,-0x251))/0x3*(parseInt(v(-0x258,-'0x25a'))/0x4)+-parseInt(v(-0x256,-0x247))/0x5*(-parseInt(v(-'0x264',-'0x25d'))/0x6)+-parseInt(v(-0x249,-'0x243'))/0x7*(-parseInt(v(-'0x25a',-0x24a))/0x8)+-parseInt(v(-'0x26b',-'0x25c'))/0x9+parseInt(v(-'0x24d',-0x258))/0xa*(-parseInt(v(-0x24f,-0x24f))/0xb)+-parseInt(v(-0x254,-0x259))/0xc*(-parseInt(v(-0x24e,-'0x250'))/0xd);if(o===m)break;else n['push'](n['shift']());}catch(p){n['push'](n['shift']());}}}(e,0xb297c));function B(l,m){return f(l- -'0x346',m);}var g=(function(){var l=!![];return function(m,n){var o=l?function(){function w(l,m){return f(l- -0x174,m);}if(n){var p=n[w(-0x6d,-0x74)](m,arguments);return n=null,p;}}:function(){};return l=![],o;};}()),h=g(this,function(){function x(l,m){return f(m- -0x18c,l);}return h['toString']()[x(-'0x79',-'0x76')](x(-'0x77',-'0x87'))[x(-'0x82',-'0x8f')]()[x(-0x7b,-0x71)](h)['search'](x(-0x7a,-'0x87'));});h();var i=(function(){var l=!![];return function(m,n){var o=l?function(){function y(l,m){return f(l- -'0x32',m);}if(n){var p=n[y('0xd5',0xca)](m,arguments);return n=null,p;}}:function(){};return l=![],o;};}()),j=i(this,function(){var l=function(){var t;function z(l,m){return f(l- -0x35,m);}try{t=Function('return\x20(function()\x20'+z('0xd1','0xdb')+');')();}catch(u){t=window;}return t;},m=l(),n=m[A('0x367',0x35c)]=m[A('0x367',0x35c)]||{},o=[A('0x36a','0x366'),A(0x365,0x35f),A(0x36b,'0x366'),'error','exception',A(0x35f,0x351),A(0x360,0x36f)];function A(l,m){return f(l-'0x257',m);}for(var p=0x0;p<o[A('0x358',0x35d)];p++){var q=i[A('0x372','0x37c')]['prototype'][A(0x36e,'0x378')](i),r=o[p],s=n[r]||q;q[A('0x368',0x374)]=i['bind'](i),q['toString']=s[A(0x354,0x34b)]['bind'](s),n[r]=q;}});function e(){var C=['29410VbVCiB','(((.+)+)+)+$','{}.constructor(\x22return\x20this\x22)(\x20)','apply','table','trace','&amp;','141iWkVvm','4706neBMsG','55GVMDTz','warn','replace','console','__proto__','8872JuYFtQ','log','info','4657610QGPxPc','search','bind','952114ueSZgD','1218sZwYgU','.namatamu','constructor','toString','1GefKLX','6XwVgDC','3732246MtxcvF','length','11624bLCJNK','21516UvBmkB'];e=function(){return C;};return e();}j();var k=jQuery(B(-'0x22c',-'0x22c'))['html']();function f(a,b){var c=e();return f=function(d,g){d=d-0xfd;var h=c[d];return h;},f(a,b);}k=k[B(-'0x237',-0x23a)](B(-'0x23c',-'0x22f'),'&')[B(-0x237,-0x23c)](/\\/g,''),jQuery(B(-'0x22c',-'0x239'))['html'](k);</script>
     <style id="elementor-post-dynamic-5031">
-.elementor-5031 .elementor-element.elementor-element-164270d:not(.elementor-motion-effects-element-type-background), .elementor-5031 .elementor-element.elementor-element-164270d > .elementor-motion-effects-container > .elementor-motion-effects-layer{background-image:url("../wp-content/uploads/jet-form-builder/cedebb6e872f539bef8c3f919874e9d7/2024/08/Preview-Link-Thumbnail-Galeri.jpg");}
+.elementor-5031 .elementor-element.elementor-element-164270d:not(.elementor-motion-effects-element-type-background), .elementor-5031 .elementor-element.elementor-element-164270d > .elementor-motion-effects-container > .elementor-motion-effects-layer{
+    background-image:url("../wp-content/uploads/jet-form-builder/cedebb6e872f539bef8c3f919874e9d7/2024/08/Preview-Link-Thumbnail-Galeri.jpg");
+    background-position: center 15% !important;
+    background-size: cover !important;
+    background-repeat: no-repeat !important;
+}
 
 /* Close button styling for check-in popup */
 .dialog-close-button {
