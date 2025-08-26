@@ -1106,7 +1106,7 @@ but ours is my favorite.</p>				</div>
 									<label style="cursor: pointer;"><input type="radio" name="attendance" value="Ragu-ragu"> Ragu-ragu</label>
 								</div>
 								<textarea id="guest-wish" name="guest-wish" rows="3" placeholder="Tulis doa dan ucapan..." required style="padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-family: 'Poppins', sans-serif; resize: vertical; background-color: rgba(255,255,255,0.8); color: #333;"></textarea>
-								<button type="button" id="submit-btn" onclick="handleSubmit()" style="background: #C0A989; color: #fff; padding: 12px 0; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-family: 'Poppins', sans-serif; font-size: 16px; transition: background 0.3s; pointer-events: auto; z-index: 999; position: relative; width: 100%;">Kirim Ucapan</button>
+								<button type="button" id="submit-btn" style="background: #C0A989; color: #fff; padding: 12px 0; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-family: 'Poppins', sans-serif; font-size: 16px; transition: background 0.3s; pointer-events: auto; z-index: 999; position: relative; width: 100%;">Kirim Ucapan</button>
 							</form>
 							<div style="margin-top: 32px; text-align: center;">
 								<button id="toggle-wishes" style="background: rgba(255,255,255,0.2); color: #fff; padding: 8px 18px; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; cursor: pointer; font-family: 'Poppins', sans-serif;">Tampilkan Ucapan (<span id="wishes-count">0</span>)</button>
@@ -1116,7 +1116,6 @@ but ours is my favorite.</p>				</div>
 						<script>
 							let wishes = [];
 							let isSubmitting = false;
-							let loadingWishes = false;
 							const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby5Xljo77Xrnx_PzRLUWDE3x5bXtRCATXEL2D_aelT3n4japQtY5_d5ckXHNWcYIc5IgA/exec';
 							
 							function sanitizeHTML(str) {
@@ -1125,240 +1124,62 @@ but ours is my favorite.</p>				</div>
 								return temp.innerHTML;
 							}
 							
-							// Enhanced mobile-friendly JSONP loader with retry mechanism
-							function loadWishesFromSpreadsheet(retryCount = 0) {
-								if (loadingWishes) {
-									console.log('Already loading wishes, skipping...');
-									return;
-								}
-								
-								loadingWishes = true;
-								console.log('Loading wishes from spreadsheet... (attempt ' + (retryCount + 1) + ')');
-								
-								const callbackName = 'load_callback_' + Date.now() + '_' + Math.round(100000 * Math.random());
-								const requestUrl = SCRIPT_URL + '?callback=' + callbackName + '&t=' + Date.now();
-								
-								// Set timeout for mobile devices
-								const timeoutId = setTimeout(() => {
-									console.log('Request timeout, cleaning up...');
-									if (window[callbackName]) {
-										delete window[callbackName];
-									}
-									const scriptEl = document.querySelector('script[src*="' + callbackName + '"]');
-									if (scriptEl && scriptEl.parentNode) {
-										scriptEl.parentNode.removeChild(scriptEl);
-									}
-									loadingWishes = false;
-									
-									// Retry up to 3 times
-									if (retryCount < 2) {
-										console.log('Retrying in 2 seconds...');
-										setTimeout(() => loadWishesFromSpreadsheet(retryCount + 1), 2000);
-									} else {
-										console.log('Failed to load wishes after 3 attempts');
-										updateWishesCount(0);
-									}
-								}, 10000); // 10 second timeout
+							function loadWishesFromSpreadsheet() {
+								console.log('Loading wishes from spreadsheet...');
+								const callbackName = 'load_callback_' + Math.round(100000 * Math.random());
+								const requestUrl = SCRIPT_URL + '?callback=' + callbackName;
 								
 								window[callbackName] = function(data) {
-									clearTimeout(timeoutId);
 									console.log('Received data:', data);
-									
-									if (data && data.success && data.wishes) {
+									if (data.success && data.wishes) {
 										wishes = data.wishes.map(w => ({
-											name: w.name || '',
-											attendance: w.attendance || '',
-											wish: w.wish || '',
-											time: w.timestamp ? new Date(w.timestamp).toLocaleString('id-ID', { 
-												dateStyle: 'medium', 
-												timeStyle: 'short' 
-											}) : 'Baru saja'
+											name: w.name,
+											attendance: w.attendance,
+											wish: w.wish,
+											time: new Date(w.timestamp).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
 										}));
 										
-										updateWishesCount(wishes.length);
-										console.log('Successfully loaded', wishes.length, 'wishes');
+										const wishesCount = document.getElementById('wishes-count');
+										if (wishesCount) {
+											wishesCount.textContent = wishes.length;
+										}
+										console.log('Loaded', wishes.length, 'wishes');
 									} else {
-										console.log('No wishes found or error:', data ? data.message : 'Invalid response');
-										updateWishesCount(0);
+										console.log('No wishes found or error:', data.message);
 									}
 									
 									// Cleanup
-									const scriptEl = document.querySelector('script[src*="' + callbackName + '"]');
-									if (scriptEl && scriptEl.parentNode) {
-										scriptEl.parentNode.removeChild(scriptEl);
-									}
+									document.head.removeChild(script);
 									delete window[callbackName];
-									loadingWishes = false;
 								};
 								
 								const script = document.createElement('script');
 								script.src = requestUrl;
-								script.async = true;
 								script.onerror = function() {
-									clearTimeout(timeoutId);
-									console.log('Script loading failed');
-									
-									if (script.parentNode) {
-										script.parentNode.removeChild(script);
-									}
-									if (window[callbackName]) {
-										delete window[callbackName];
-									}
-									loadingWishes = false;
-									
-									// Retry on error
-									if (retryCount < 2) {
-										console.log('Retrying after script error in 2 seconds...');
-										setTimeout(() => loadWishesFromSpreadsheet(retryCount + 1), 2000);
-									} else {
-										console.log('Failed to load wishes after 3 attempts');
-										updateWishesCount(0);
-									}
+									console.log('Failed to load wishes from spreadsheet');
+									document.head.removeChild(script);
+									delete window[callbackName];
 								};
 								
 								document.head.appendChild(script);
 							}
 							
-							// Helper function to update wishes count
-							function updateWishesCount(count) {
-								const wishesCount = document.getElementById('wishes-count');
-								if (wishesCount) {
-									wishesCount.textContent = count;
-								}
-								const toggleBtn = document.getElementById('toggle-wishes');
-								if (toggleBtn) {
-									const isVisible = document.getElementById('wishes-list').style.display === 'block';
-									toggleBtn.textContent = (isVisible ? 'Sembunyikan' : 'Tampilkan') + ' Ucapan (' + count + ')';
-								}
-							}
-							
-							function handleSubmit() {
-								console.log('handleSubmit called');
-								
-								if (isSubmitting) {
-									console.log('Already submitting');
-									return;
-								}
-								
-								const form = document.getElementById('rsvp-form');
-								const nameInput = document.getElementById('guest-name');
-								const wishInput = document.getElementById('guest-wish');
-								const submitButton = document.getElementById('submit-btn');
-								
-								const name = nameInput.value.trim();
-								const attendance = form.querySelector('input[name="attendance"]:checked');
-								const wish = wishInput.value.trim();
-								const originalButtonText = submitButton.textContent;
-								
-								if (name && attendance && wish.length >= 2) {
-									isSubmitting = true;
-									submitButton.textContent = 'Mengirim...';
-									submitButton.disabled = true;
-									submitButton.style.backgroundColor = '#6c757d';
-									
-									const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
-									const params = new URLSearchParams({
-										name: name,
-										attendance: attendance.value,
-										wish: wish,
-										callback: callbackName
-									});
-									
-									const requestUrl = SCRIPT_URL + '?' + params.toString();
-									
-									window[callbackName] = function(data) {
-										if (data.success) {
-											wishes.unshift({
-												name: sanitizeHTML(name),
-												attendance: sanitizeHTML(attendance.value),
-												wish: sanitizeHTML(wish),
-												time: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
-											});
-											
-											const wishesCount = document.getElementById('wishes-count');
-											wishesCount.textContent = wishes.length;
-											form.reset();
-											
-											submitButton.textContent = 'Berhasil Terkirim!';
-											submitButton.style.backgroundColor = '#28a745';
-											
-											const wishesVisible = document.getElementById('wishes-list').style.display === 'block';
-											if (wishesVisible) {
-												renderWishes();
-											}
-										} else {
-											submitButton.textContent = 'Gagal Kirim';
-											submitButton.style.backgroundColor = '#dc3545';
-											alert('Gagal mengirim data: ' + (data.message || 'Terjadi kesalahan'));
-										}
-										
-										document.head.removeChild(script);
-										delete window[callbackName];
-										
-										setTimeout(() => {
-											submitButton.textContent = originalButtonText;
-											submitButton.style.backgroundColor = '#C0A989';
-											submitButton.disabled = false;
-											isSubmitting = false;
-										}, 3000);
-									};
-									
-									const script = document.createElement('script');
-									script.src = requestUrl;
-									script.onerror = function() {
-										submitButton.textContent = 'Gagal Kirim';
-										submitButton.style.backgroundColor = '#dc3545';
-										alert('Terjadi kesalahan saat mengirim data. Silakan coba lagi.');
-										
-										document.head.removeChild(script);
-										delete window[callbackName];
-										
-										setTimeout(() => {
-											submitButton.textContent = originalButtonText;
-											submitButton.style.backgroundColor = '#C0A989';
-											submitButton.disabled = false;
-											isSubmitting = false;
-										}, 3000);
-									};
-									
-									document.head.appendChild(script);
-								} else {
-									alert('Mohon lengkapi semua kolom. Ucapan minimal 2 karakter.');
-								}
-							}
 
-							// Enhanced mobile-friendly render function
 							function renderWishes() {
 								const wishesList = document.getElementById('wishes-list');
-								if (!wishesList) {
-									console.error('Wishes list element not found');
-									return;
-								}
-								
 								const visibleWishes = wishes.filter(w => w.attendance !== 'Tidak Hadir');
 
 								if (visibleWishes.length === 0) {
-									wishesList.innerHTML = `<p style="text-align:center; color:#ddd; font-family: 'Poppins', sans-serif; padding: 20px; font-size: 14px;">Belum ada ucapan dari tamu yang akan hadir.</p>`;
+									wishesList.innerHTML = `<p style="text-align:center; color:#ddd; font-family: 'Poppins', sans-serif;">Belum ada ucapan dari tamu yang akan hadir.</p>`;
 									return;
 								}
-								
-								try {
-									wishesList.innerHTML = visibleWishes.map(w => {
-										const safeName = sanitizeHTML(w.name || 'Anonim');
-										const safeAttendance = sanitizeHTML(w.attendance || 'Hadir');
-										const safeWish = sanitizeHTML(w.wish || '');
-										const safeTime = w.time || 'Baru saja';
-										
-										return `<div style="border-bottom: 1px solid rgba(255,255,255,0.2); padding: 12px 0; font-family: 'Poppins', sans-serif; color: #FFFFFF; word-wrap: break-word;">
-											<p style="margin:0; font-weight: bold; font-size: 14px;">${safeName} <span style="font-weight:normal; color:#ddd; background-color: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-size: 11px;">${safeAttendance}</span></p>
-											<p style="margin: 8px 0; font-style: italic; font-size: 13px; line-height: 1.4;">"${safeWish}"</p>
-											<p style="margin:0; font-size:10px; color:#aaa; text-align: right;">${safeTime}</p>
-										</div>`;
-									}).join('');
-								} catch (error) {
-									console.error('Error rendering wishes:', error);
-									wishesList.innerHTML = `<p style="text-align:center; color:#ddd; font-family: 'Poppins', sans-serif; padding: 20px;">Terjadi kesalahan saat menampilkan ucapan.</p>`;
-								}
+								wishesList.innerHTML = visibleWishes.map(w =>
+									`<div style="border-bottom: 1px solid rgba(255,255,255,0.2); padding: 12px 0; font-family: 'Poppins', sans-serif; color: #FFFFFF;">
+										<p style="margin:0; font-weight: bold;">${w.name} <span style="font-weight:normal; color:#ddd; background-color: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${w.attendance}</span></p>
+										<p style="margin: 8px 0; font-style: italic;">"${w.wish}"</p>
+										<p style="margin:0; font-size:11px; color:#aaa; text-align: right;">${w.time}</p>
+									</div>`
+								).join('');
 							}
 
 							document.addEventListener('DOMContentLoaded', function() {
@@ -1371,137 +1192,155 @@ but ours is my favorite.</p>				</div>
 								// Load ucapan dari spreadsheet saat halaman dimuat
 								loadWishesFromSpreadsheet();
 								
-								// Event listener untuk tombol submit - dengan delay untuk memastikan DOM ready
-								setTimeout(function() {
-									const submitBtn = document.getElementById('submit-btn');
-									console.log('Looking for submit button:', submitBtn);
-									
-									if (submitBtn) {
-										console.log('Submit button found, adding event listener');
-										submitBtn.addEventListener('click', function(e) {
+								// Event listener untuk tombol submit
+								const submitBtn = document.getElementById('submit-btn');
+								if (submitBtn) {
+									submitBtn.addEventListener('click', function(e) {
 										e.preventDefault();
 										e.stopPropagation();
 										
-										console.log('Submit button clicked');
+										console.log('Tombol kirim diklik');
 										
-										// Cegah multiple submissions
+										// Cegah pengiriman ganda
 										if (isSubmitting) {
-											console.log('Submission already in progress');
+											console.log('Sedang mengirim, tunggu...');
 											return false;
 										}
 									
-									const nameInput = document.getElementById('guest-name');
-									const wishInput = document.getElementById('guest-wish');
-									
-									const name = nameInput.value.trim();
-									const attendance = form.querySelector('input[name="attendance"]:checked');
-									const wish = wishInput.value.trim();
-									
-									const submitButton = document.getElementById('submit-btn');
-									const originalButtonText = submitButton.textContent;
-			
-									if (name && attendance && wish.length >= 2) {
-										// Set flag dan tampilkan loading
-										isSubmitting = true;
-										submitButton.textContent = 'Mengirim...';
-										submitButton.disabled = true;
-										submitButton.style.backgroundColor = '#6c757d';
+										const nameInput = document.getElementById('guest-name');
+										const wishInput = document.getElementById('guest-wish');
 										
-										// Kirim data ke Google Spreadsheet menggunakan JSONP untuk menghindari CORS
-										const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
+										const name = nameInput.value.trim();
+										const attendance = form.querySelector('input[name="attendance"]:checked');
+										const wish = wishInput.value.trim();
 										
-										// Buat URL dengan parameter GET
-										const params = new URLSearchParams({
-											name: name,
-											attendance: attendance.value,
-											wish: wish,
-											callback: callbackName
-										});
-										
-										const requestUrl = SCRIPT_URL + '?' + params.toString();
-										
-										// Buat callback function
-										window[callbackName] = function(data) {
-											if (data.success) {
-												// Tambahkan ke array lokal untuk tampilan
-												wishes.unshift({
-													name: sanitizeHTML(name),
-													attendance: sanitizeHTML(attendance.value),
-													wish: sanitizeHTML(wish),
-													time: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
-												});
+										const submitButton = document.getElementById('submit-btn');
+										const originalButtonText = submitButton.textContent;
+				
+										if (name && attendance && wish.length >= 2) {
+											// Set status mengirim
+											isSubmitting = true;
+											submitButton.textContent = 'Mengirim...';
+											submitButton.disabled = true;
+											submitButton.style.backgroundColor = '#6c757d';
+											
+											// Kirim data ke Google Spreadsheet
+											const callbackName = 'jsonp_callback_' + Date.now() + '_' + Math.round(100000 * Math.random());
+											
+											const params = new URLSearchParams({
+												name: name,
+												attendance: attendance.value,
+												wish: wish,
+												callback: callbackName
+											});
+											
+											const requestUrl = SCRIPT_URL + '?' + params.toString();
+											
+											// Fungsi callback untuk respons
+											window[callbackName] = function(data) {
+												console.log('Respons diterima:', data);
 												
-												wishesCount.textContent = wishes.length;
-												form.reset();
-												
-												// Tampilkan sukses
-												submitButton.textContent = 'Berhasil Terkirim!';
-												submitButton.style.backgroundColor = '#28a745';
-												
-												if (wishesVisible) {
-													renderWishes();
+												if (data && data.success) {
+													// Tambahkan ucapan baru ke daftar
+													wishes.unshift({
+														name: sanitizeHTML(name),
+														attendance: sanitizeHTML(attendance.value),
+														wish: sanitizeHTML(wish),
+														time: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
+													});
+													
+													// Update jumlah ucapan
+													const wishesCount = document.getElementById('wishes-count');
+													if (wishesCount) {
+														wishesCount.textContent = wishes.length;
+													}
+													
+													// Reset form
+													form.reset();
+													
+													// Tampilkan status berhasil
+													submitButton.textContent = 'Berhasil Terkirim!';
+													submitButton.style.backgroundColor = '#28a745';
+													
+													// Update tampilan ucapan jika sedang ditampilkan
+													if (wishesVisible) {
+														renderWishes();
+													}
+													
+													// Update tombol toggle
+													const toggleBtn = document.getElementById('toggle-wishes');
+													if (toggleBtn) {
+														const isVisible = document.getElementById('wishes-list').style.display === 'block';
+														toggleBtn.textContent = (isVisible ? 'Sembunyikan' : 'Tampilkan') + ' Ucapan (' + wishes.length + ')';
+													}
+												} else {
+													// Tampilkan pesan error
+													submitButton.textContent = 'Gagal Kirim';
+													submitButton.style.backgroundColor = '#dc3545';
+													alert('Gagal mengirim ucapan: ' + (data ? data.message : 'Terjadi kesalahan'));
 												}
-											} else {
-												// Tampilkan error
+												
+												// Bersihkan script dan callback
+												const scriptEl = document.querySelector('script[src*="' + callbackName + '"]');
+												if (scriptEl && scriptEl.parentNode) {
+													scriptEl.parentNode.removeChild(scriptEl);
+												}
+												delete window[callbackName];
+												
+												// Reset tombol setelah 3 detik
+												setTimeout(() => {
+													submitButton.textContent = originalButtonText;
+													submitButton.style.backgroundColor = '#C0A989';
+													submitButton.disabled = false;
+													isSubmitting = false;
+												}, 3000);
+											};
+											
+											// Buat dan kirim request
+											const script = document.createElement('script');
+											script.src = requestUrl;
+											script.onerror = function() {
+												console.log('Gagal memuat script');
+												
 												submitButton.textContent = 'Gagal Kirim';
 												submitButton.style.backgroundColor = '#dc3545';
-												alert('Gagal mengirim data: ' + (data.message || 'Terjadi kesalahan'));
-											}
+												alert('Terjadi kesalahan saat mengirim ucapan. Silakan coba lagi.');
+												
+												// Bersihkan
+												if (script.parentNode) {
+													script.parentNode.removeChild(script);
+												}
+												if (window[callbackName]) {
+													delete window[callbackName];
+												}
+												
+												// Reset tombol setelah 3 detik
+												setTimeout(() => {
+													submitButton.textContent = originalButtonText;
+													submitButton.style.backgroundColor = '#C0A989';
+													submitButton.disabled = false;
+													isSubmitting = false;
+												}, 3000);
+											};
 											
-											// Cleanup
-											document.head.removeChild(script);
-											delete window[callbackName];
-											
-											// Reset tombol setelah 3 detik
-											setTimeout(() => {
-												submitButton.textContent = originalButtonText;
-												submitButton.style.backgroundColor = '#C0A989';
-												submitButton.disabled = false;
-												isSubmitting = false; // Reset flag untuk success
-											}, 3000);
-										};
-										
-										// Buat script tag untuk JSONP request
-										const script = document.createElement('script');
-										script.src = requestUrl;
-										script.onerror = function() {
-											submitButton.textContent = 'Gagal Kirim';
-											submitButton.style.backgroundColor = '#dc3545';
-											alert('Terjadi kesalahan saat mengirim data. Silakan coba lagi.');
-											
-											// Cleanup
-											document.head.removeChild(script);
-											delete window[callbackName];
-											
-											// Reset tombol setelah 3 detik
-											setTimeout(() => {
-												submitButton.textContent = originalButtonText;
-												submitButton.style.backgroundColor = '#C0A989';
-												submitButton.disabled = false;
-												isSubmitting = false; // Reset flag untuk error
-											}, 3000);
-										};
-										
-										document.head.appendChild(script);
-									} else {
-										alert('Mohon lengkapi semua kolom. Ucapan minimal 2 karakter.');
-									}
+											document.head.appendChild(script);
+										} else {
+											alert('Mohon lengkapi semua kolom. Ucapan minimal 2 karakter.');
+										}
 									});
-									} else {
-										console.error('Submit button tidak ditemukan');
-									}
-								}, 100);
+								} else {
+									console.error('Tombol submit tidak ditemukan');
+								}
 			
-								// Enhanced toggle button with mobile support
 								toggleBtn.addEventListener('click', function() {
 									wishesVisible = !wishesVisible;
 									if (wishesVisible) {
 										wishesList.style.display = 'block';
-										updateWishesCount(wishes.length);
+										toggleBtn.textContent = 'Sembunyikan Ucapan (' + wishes.length + ')';
 										renderWishes();
 									} else {
 										wishesList.style.display = 'none';
-										updateWishesCount(wishes.length);
+										toggleBtn.textContent = 'Tampilkan Ucapan (' + wishes.length + ')';
 									}
 								});
 							});
