@@ -1116,6 +1116,7 @@ but ours is my favorite.</p>				</div>
 						<script>
 							let wishes = [];
 							let isSubmitting = false;
+							let loadingWishes = false;
 							const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby5Xljo77Xrnx_PzRLUWDE3x5bXtRCATXEL2D_aelT3n4japQtY5_d5ckXHNWcYIc5IgA/exec';
 							
 							function sanitizeHTML(str) {
@@ -1124,44 +1125,111 @@ but ours is my favorite.</p>				</div>
 								return temp.innerHTML;
 							}
 							
-							function loadWishesFromSpreadsheet() {
-								console.log('Loading wishes from spreadsheet...');
-								const callbackName = 'load_callback_' + Math.round(100000 * Math.random());
-								const requestUrl = SCRIPT_URL + '?callback=' + callbackName;
+							// Enhanced mobile-friendly JSONP loader with retry mechanism
+							function loadWishesFromSpreadsheet(retryCount = 0) {
+								if (loadingWishes) {
+									console.log('Already loading wishes, skipping...');
+									return;
+								}
+								
+								loadingWishes = true;
+								console.log('Loading wishes from spreadsheet... (attempt ' + (retryCount + 1) + ')');
+								
+								const callbackName = 'load_callback_' + Date.now() + '_' + Math.round(100000 * Math.random());
+								const requestUrl = SCRIPT_URL + '?callback=' + callbackName + '&t=' + Date.now();
+								
+								// Set timeout for mobile devices
+								const timeoutId = setTimeout(() => {
+									console.log('Request timeout, cleaning up...');
+									if (window[callbackName]) {
+										delete window[callbackName];
+									}
+									const scriptEl = document.querySelector('script[src*="' + callbackName + '"]');
+									if (scriptEl && scriptEl.parentNode) {
+										scriptEl.parentNode.removeChild(scriptEl);
+									}
+									loadingWishes = false;
+									
+									// Retry up to 3 times
+									if (retryCount < 2) {
+										console.log('Retrying in 2 seconds...');
+										setTimeout(() => loadWishesFromSpreadsheet(retryCount + 1), 2000);
+									} else {
+										console.log('Failed to load wishes after 3 attempts');
+										updateWishesCount(0);
+									}
+								}, 10000); // 10 second timeout
 								
 								window[callbackName] = function(data) {
+									clearTimeout(timeoutId);
 									console.log('Received data:', data);
-									if (data.success && data.wishes) {
+									
+									if (data && data.success && data.wishes) {
 										wishes = data.wishes.map(w => ({
-											name: w.name,
-											attendance: w.attendance,
-											wish: w.wish,
-											time: new Date(w.timestamp).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
+											name: w.name || '',
+											attendance: w.attendance || '',
+											wish: w.wish || '',
+											time: w.timestamp ? new Date(w.timestamp).toLocaleString('id-ID', { 
+												dateStyle: 'medium', 
+												timeStyle: 'short' 
+											}) : 'Baru saja'
 										}));
 										
-										const wishesCount = document.getElementById('wishes-count');
-										if (wishesCount) {
-											wishesCount.textContent = wishes.length;
-										}
-										console.log('Loaded', wishes.length, 'wishes');
+										updateWishesCount(wishes.length);
+										console.log('Successfully loaded', wishes.length, 'wishes');
 									} else {
-										console.log('No wishes found or error:', data.message);
+										console.log('No wishes found or error:', data ? data.message : 'Invalid response');
+										updateWishesCount(0);
 									}
 									
 									// Cleanup
-									document.head.removeChild(script);
+									const scriptEl = document.querySelector('script[src*="' + callbackName + '"]');
+									if (scriptEl && scriptEl.parentNode) {
+										scriptEl.parentNode.removeChild(scriptEl);
+									}
 									delete window[callbackName];
+									loadingWishes = false;
 								};
 								
 								const script = document.createElement('script');
 								script.src = requestUrl;
+								script.async = true;
 								script.onerror = function() {
-									console.log('Failed to load wishes from spreadsheet');
-									document.head.removeChild(script);
-									delete window[callbackName];
+									clearTimeout(timeoutId);
+									console.log('Script loading failed');
+									
+									if (script.parentNode) {
+										script.parentNode.removeChild(script);
+									}
+									if (window[callbackName]) {
+										delete window[callbackName];
+									}
+									loadingWishes = false;
+									
+									// Retry on error
+									if (retryCount < 2) {
+										console.log('Retrying after script error in 2 seconds...');
+										setTimeout(() => loadWishesFromSpreadsheet(retryCount + 1), 2000);
+									} else {
+										console.log('Failed to load wishes after 3 attempts');
+										updateWishesCount(0);
+									}
 								};
 								
 								document.head.appendChild(script);
+							}
+							
+							// Helper function to update wishes count
+							function updateWishesCount(count) {
+								const wishesCount = document.getElementById('wishes-count');
+								if (wishesCount) {
+									wishesCount.textContent = count;
+								}
+								const toggleBtn = document.getElementById('toggle-wishes');
+								if (toggleBtn) {
+									const isVisible = document.getElementById('wishes-list').style.display === 'block';
+									toggleBtn.textContent = (isVisible ? 'Sembunyikan' : 'Tampilkan') + ' Ucapan (' + count + ')';
+								}
 							}
 							
 							function handleSubmit() {
@@ -1259,21 +1327,38 @@ but ours is my favorite.</p>				</div>
 								}
 							}
 
+							// Enhanced mobile-friendly render function
 							function renderWishes() {
 								const wishesList = document.getElementById('wishes-list');
+								if (!wishesList) {
+									console.error('Wishes list element not found');
+									return;
+								}
+								
 								const visibleWishes = wishes.filter(w => w.attendance !== 'Tidak Hadir');
 
 								if (visibleWishes.length === 0) {
-									wishesList.innerHTML = `<p style="text-align:center; color:#ddd; font-family: 'Poppins', sans-serif;">Belum ada ucapan dari tamu yang akan hadir.</p>`;
+									wishesList.innerHTML = `<p style="text-align:center; color:#ddd; font-family: 'Poppins', sans-serif; padding: 20px; font-size: 14px;">Belum ada ucapan dari tamu yang akan hadir.</p>`;
 									return;
 								}
-								wishesList.innerHTML = visibleWishes.map(w =>
-									`<div style="border-bottom: 1px solid rgba(255,255,255,0.2); padding: 12px 0; font-family: 'Poppins', sans-serif; color: #FFFFFF;">
-										<p style="margin:0; font-weight: bold;">${w.name} <span style="font-weight:normal; color:#ddd; background-color: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${w.attendance}</span></p>
-										<p style="margin: 8px 0; font-style: italic;">"${w.wish}"</p>
-										<p style="margin:0; font-size:11px; color:#aaa; text-align: right;">${w.time}</p>
-									</div>`
-								).join('');
+								
+								try {
+									wishesList.innerHTML = visibleWishes.map(w => {
+										const safeName = sanitizeHTML(w.name || 'Anonim');
+										const safeAttendance = sanitizeHTML(w.attendance || 'Hadir');
+										const safeWish = sanitizeHTML(w.wish || '');
+										const safeTime = w.time || 'Baru saja';
+										
+										return `<div style="border-bottom: 1px solid rgba(255,255,255,0.2); padding: 12px 0; font-family: 'Poppins', sans-serif; color: #FFFFFF; word-wrap: break-word;">
+											<p style="margin:0; font-weight: bold; font-size: 14px;">${safeName} <span style="font-weight:normal; color:#ddd; background-color: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-size: 11px;">${safeAttendance}</span></p>
+											<p style="margin: 8px 0; font-style: italic; font-size: 13px; line-height: 1.4;">"${safeWish}"</p>
+											<p style="margin:0; font-size:10px; color:#aaa; text-align: right;">${safeTime}</p>
+										</div>`;
+									}).join('');
+								} catch (error) {
+									console.error('Error rendering wishes:', error);
+									wishesList.innerHTML = `<p style="text-align:center; color:#ddd; font-family: 'Poppins', sans-serif; padding: 20px;">Terjadi kesalahan saat menampilkan ucapan.</p>`;
+								}
 							}
 
 							document.addEventListener('DOMContentLoaded', function() {
@@ -1407,15 +1492,16 @@ but ours is my favorite.</p>				</div>
 									}
 								}, 100);
 			
+								// Enhanced toggle button with mobile support
 								toggleBtn.addEventListener('click', function() {
 									wishesVisible = !wishesVisible;
 									if (wishesVisible) {
 										wishesList.style.display = 'block';
-										toggleBtn.textContent = 'Sembunyikan Ucapan (' + wishes.length + ')';
+										updateWishesCount(wishes.length);
 										renderWishes();
 									} else {
 										wishesList.style.display = 'none';
-										toggleBtn.textContent = 'Tampilkan Ucapan (' + wishes.length + ')';
+										updateWishesCount(wishes.length);
 									}
 								});
 							});
