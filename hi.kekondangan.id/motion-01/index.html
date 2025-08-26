@@ -1118,6 +1118,26 @@ but ours is my favorite.</p>				</div>
 							let isSubmitting = false;
 							const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby5Xljo77Xrnx_PzRLUWDE3x5bXtRCATXEL2D_aelT3n4japQtY5_d5ckXHNWcYIc5IgA/exec';
 							
+							// Force clear any cached scripts and callbacks
+							function clearCachedRequests() {
+								// Clear any existing callback functions
+								Object.keys(window).forEach(key => {
+									if (key.startsWith('jsonp_callback_') || key.startsWith('load_callback_')) {
+										delete window[key];
+									}
+								});
+								
+								// Remove any existing script tags from previous requests
+								const existingScripts = document.querySelectorAll('script[src*="script.google.com"]');
+								existingScripts.forEach(script => {
+									if (script.parentNode) {
+										script.parentNode.removeChild(script);
+									}
+								});
+								
+								console.log('Cache dan callback lama sudah dibersihkan');
+							}
+							
 							function sanitizeHTML(str) {
 								const temp = document.createElement('div');
 								temp.textContent = str;
@@ -1126,8 +1146,10 @@ but ours is my favorite.</p>				</div>
 							
 							function loadWishesFromSpreadsheet() {
 								console.log('Loading wishes from spreadsheet...');
-								const callbackName = 'load_callback_' + Math.round(100000 * Math.random());
-								const requestUrl = SCRIPT_URL + '?callback=' + callbackName;
+								clearCachedRequests(); // Bersihkan cache sebelum load
+								const callbackName = 'load_callback_' + Date.now() + '_' + Math.round(100000 * Math.random());
+								// Tambahkan cache busting untuk mengatasi masalah browser cache
+								const requestUrl = SCRIPT_URL + '?callback=' + callbackName + '&_cacheBust=' + Date.now() + '&_rand=' + Math.random();
 								
 								window[callbackName] = function(data) {
 									console.log('Received data:', data);
@@ -1201,6 +1223,9 @@ but ours is my favorite.</p>				</div>
 										
 										console.log('Tombol kirim diklik');
 										
+										// Bersihkan cache sebelum kirim
+										clearCachedRequests();
+										
 										// Cegah pengiriman ganda
 										if (isSubmitting) {
 											console.log('Sedang mengirim, tunggu...');
@@ -1231,7 +1256,10 @@ but ours is my favorite.</p>				</div>
 												name: name,
 												attendance: attendance.value,
 												wish: wish,
-												callback: callbackName
+												callback: callbackName,
+												_cacheBust: Date.now(),
+												_rand: Math.random(),
+												_session: Date.now() + '_' + Math.random()
 											});
 											
 											const requestUrl = SCRIPT_URL + '?' + params.toString();
@@ -1333,10 +1361,8 @@ but ours is my favorite.</p>				</div>
 											script.src = requestUrl;
 											script.async = true;
 											
-											// Tambahkan cache busting untuk mobile
-											if (isMobile) {
-												script.src += '&_t=' + Date.now();
-											}
+											// Force reload script untuk mengatasi cache browser
+											script.src = requestUrl;
 											
 											script.onerror = function() {
 												clearTimeout(timeoutId);
